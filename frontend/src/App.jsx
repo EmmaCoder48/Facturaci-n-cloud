@@ -1,9 +1,15 @@
 import { useEffect, useState } from 'react';
+import Login from './Login';
+import Inventario from './Inventario';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const Q = (n) => 'Q ' + Number(n).toFixed(2);
 
 export default function App() {
+  const [adminPassword, setAdminPassword] = useState(
+    () => sessionStorage.getItem('adminPassword') || ''
+  );
+  const [vista, setVista] = useState('caja'); // 'caja' | 'inventario'
   const [productos, setProductos] = useState([]);
   const [carrito, setCarrito] = useState({}); // { idProducto: cantidad }
   const [cliente, setCliente] = useState({ nit: '', nombre: '', direccion: '' });
@@ -11,18 +17,41 @@ export default function App() {
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
 
-  useEffect(() => {
+  const cargarProductos = () => {
     fetch(`${API}/api/productos`)
       .then((r) => r.json())
       .then(setProductos)
       .catch(() => setError('No se pudo conectar con el servidor'));
-  }, []);
+  };
+
+  useEffect(() => {
+    if (adminPassword) cargarProductos();
+  }, [adminPassword]);
+
+  if (!adminPassword) {
+    return (
+      <Login
+        api={API}
+        onLogin={(password) => {
+          sessionStorage.setItem('adminPassword', password);
+          setAdminPassword(password);
+        }}
+      />
+    );
+  }
+
+  const salir = () => {
+    sessionStorage.removeItem('adminPassword');
+    setAdminPassword('');
+  };
 
   const cambiar = (id, delta) =>
     setCarrito((c) => {
+      const producto = productos.find((p) => p.id === id);
       const cantidad = (c[id] || 0) + delta;
       const nuevo = { ...c };
       if (cantidad <= 0) delete nuevo[id];
+      else if (producto && cantidad > producto.stock) return c; // no dejar pasar del stock disponible
       else nuevo[id] = cantidad;
       return nuevo;
     });
@@ -48,6 +77,7 @@ export default function App() {
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || 'Error al facturar');
       setFactura(data);
+      cargarProductos();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -67,20 +97,49 @@ export default function App() {
     <div className="app">
       <header>
         <h1>Supermercado La Nube</h1>
-        <span>Caja 1</span>
+        <nav className="tabs">
+          <button className={vista === 'caja' ? 'activa' : ''} onClick={() => setVista('caja')}>
+            Caja
+          </button>
+          <button
+            className={vista === 'inventario' ? 'activa' : ''}
+            onClick={() => setVista('inventario')}
+          >
+            Inventario
+          </button>
+        </nav>
+        <button className="salir" onClick={salir}>
+          Salir
+        </button>
       </header>
 
       {error && <p className="error">{error}</p>}
 
+      {vista === 'inventario' ? (
+        <Inventario
+          api={API}
+          adminPassword={adminPassword}
+          productos={productos}
+          onCambio={cargarProductos}
+        />
+      ) : (
       <main>
         <section className="productos">
           <h2>Productos</h2>
           <div className="grid">
             {productos.map((p) => (
-              <button key={p.id} className="producto" onClick={() => cambiar(p.id, 1)}>
+              <button
+                key={p.id}
+                className="producto"
+                disabled={p.stock <= 0}
+                onClick={() => cambiar(p.id, 1)}
+              >
                 <small>{p.codigo}</small>
                 <strong>{p.nombre}</strong>
                 <span>{Q(p.precio)}</span>
+                <small className={p.stock <= 0 ? 'agotado' : 'disponible'}>
+                  {p.stock <= 0 ? 'Agotado' : `${p.stock} disponibles`}
+                </small>
               </button>
             ))}
           </div>
@@ -134,6 +193,7 @@ export default function App() {
           </form>
         </section>
       </main>
+      )}
     </div>
   );
 }

@@ -11,18 +11,18 @@ const config = {
 const DB_NAME = process.env.DB_NAME || 'facturacion';
 
 const PRODUCTOS_INICIALES = [
-  ['P001', 'Leche entera 1L', 9.5],
-  ['P002', 'Pan sandwich', 18.0],
-  ['P003', 'Huevos (cartón 30)', 42.0],
-  ['P004', 'Arroz 1 lb', 5.25],
-  ['P005', 'Frijol negro 1 lb', 7.0],
-  ['P006', 'Azúcar 5 lb', 22.5],
-  ['P007', 'Aceite vegetal 750ml', 19.75],
-  ['P008', 'Café molido 400g', 38.0],
-  ['P009', 'Gaseosa 2L', 14.0],
-  ['P010', 'Jabón de baño', 6.5],
-  ['P011', 'Papel higiénico 4 rollos', 16.0],
-  ['P012', 'Pollo entero (lb)', 13.5],
+  ['P001', 'Leche entera 1L', 9.5, 25],
+  ['P002', 'Pan sandwich', 18.0, 25],
+  ['P003', 'Huevos (cartón 30)', 42.0, 25],
+  ['P004', 'Arroz 1 lb', 5.25, 25],
+  ['P005', 'Frijol negro 1 lb', 7.0, 25],
+  ['P006', 'Azúcar 5 lb', 22.5, 25],
+  ['P007', 'Aceite vegetal 750ml', 19.75, 25],
+  ['P008', 'Café molido 400g', 38.0, 25],
+  ['P009', 'Gaseosa 2L', 14.0, 25],
+  ['P010', 'Jabón de baño', 6.5, 25],
+  ['P011', 'Papel higiénico 4 rollos', 16.0, 25],
+  ['P012', 'Pollo entero (lb)', 13.5, 25],
 ];
 
 let pool;
@@ -47,8 +47,11 @@ async function init() {
     id SERIAL PRIMARY KEY,
     codigo VARCHAR(20) NOT NULL UNIQUE,
     nombre VARCHAR(100) NOT NULL,
-    precio DECIMAL(10,2) NOT NULL
+    precio DECIMAL(10,2) NOT NULL,
+    stock INT NOT NULL DEFAULT 0
   )`);
+  // Por si la tabla ya existía de antes (sin la columna stock).
+  await pool.query(`ALTER TABLE productos ADD COLUMN IF NOT EXISTS stock INT NOT NULL DEFAULT 0`);
   await pool.query(`CREATE TABLE IF NOT EXISTS facturas (
     id SERIAL PRIMARY KEY,
     serie VARCHAR(10) NOT NULL,
@@ -76,12 +79,12 @@ async function init() {
     const valores = [];
     const params = [];
     PRODUCTOS_INICIALES.forEach((p, i) => {
-      const base = i * 3;
-      valores.push(`($${base + 1}, $${base + 2}, $${base + 3})`);
+      const base = i * 4;
+      valores.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4})`);
       params.push(...p);
     });
     await pool.query(
-      `INSERT INTO productos (codigo, nombre, precio) VALUES ${valores.join(', ')}`,
+      `INSERT INTO productos (codigo, nombre, precio, stock) VALUES ${valores.join(', ')}`,
       params
     );
   }

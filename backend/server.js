@@ -7,10 +7,27 @@ const { init, getPool } = require('./db');
 const IVA = 0.12; // Los precios ya incluyen IVA
 const SERIE = 'FAC';
 const redondear = (n) => Math.round(n * 100) / 100;
+const ADMIN_USER = process.env.ADMIN_USER || 'admin';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '123';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Login simple de administrador (único usuario: admin).
+app.post('/api/login', (req, res) => {
+  const { usuario, password } = req.body || {};
+  if (usuario === ADMIN_USER && password === ADMIN_PASSWORD) {
+    return res.json({ ok: true });
+  }
+  res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
+});
+
+// Protege los endpoints de administración de inventario.
+function requiereAdmin(req, res, next) {
+  if (req.get('x-admin-password') === ADMIN_PASSWORD) return next();
+  res.status(401).json({ error: 'No autorizado' });
+}
 
 app.get('/', (req, res) => res.json({ ok: true, servicio: 'facturacion-backend-v3' }));
 
@@ -18,6 +35,57 @@ app.get('/api/productos', async (req, res, next) => {
   try {
     const { rows } = await getPool().query('SELECT * FROM productos ORDER BY nombre');
     res.json(rows);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Body: { codigo, nombre, precio, stock }
+app.post('/api/productos', requiereAdmin, async (req, res, next) => {
+  try {
+    const codigo = String(req.body?.codigo || '').trim();
+    const nombre = String(req.body?.nombre || '').trim();
+    const precio = Number(req.body?.precio);
+    const stock = Number(req.body?.stock);
+
+    if (!codigo || !nombre) {
+      return res.status(400).json({ error: 'Código y nombre son obligatorios' });
+    }
+    if (!Number.isFinite(precio) || precio <= 0) {
+      return res.status(400).json({ error: 'Precio inválido' });
+    }
+    if (!Number.isInteger(stock) || stock < 0) {
+      return res.status(400).json({ error: 'Cantidad de inventario inválida' });
+    }
+
+    const existe = await getPool().query('SELECT id FROM productos WHERE codigo = $1', [codigo]);
+    if (existe.rowCount > 0) {
+      return res.status(400).json({ error: 'Ya existe un producto con ese código' });
+    }
+
+    const { rows } = await getPool().query(
+      'INSERT INTO productos (codigo, nombre, precio, stock) VALUES ($1,$2,$3,$4) RETURNING *',
+      [codigo, nombre, precio, stock]
+    );
+    res.status(201).json(rows[0]);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Body: { cantidad } — suma cantidad al inventario existente del producto.
+app.patch('/api/productos/:id/stock', requiereAdmin, async (req, res, next) => {
+  try {
+    const cantidad = Number(req.body?.cantidad);
+    if (!Number.isInteger(cantidad) || cantidad <= 0) {
+      return res.status(400).json({ error: 'Cantidad inválida' });
+    }
+    const { rows } = await getPool().query(
+      'UPDATE productos SET stock = stock + $1 WHERE id = $2 RETURNING *',
+      [cantidad, req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Producto no existe' });
+    res.json(rows[0]);
   } catch (e) {
     next(e);
   }
@@ -75,17 +143,36 @@ app.post('/api/facturas', async (req, res, next) => {
       if (!Number.isInteger(cantidad) || cantidad <= 0) {
         throw Object.assign(new Error('Cantidad inválida'), { status: 400 });
       }
-      const { rows } = await conn.query('SELECT * FROM productos WHERE id = $1', [
+      // FOR UPDATE bloquea la fila para evitar que dos facturas a la vez vendan el mismo stock.
+      const { rows } = await conn.query('SELECT * FROM productos WHERE id = $1 FOR UPDATE', [
         item.producto_id,
       ]);
       const producto = rows[0];
       if (!producto) {
         throw Object.assign(new Error('Producto no existe'), { status: 400 });
       }
+      if (producto.stock <= 0) {
+        throw Object.assign(new Error(`${producto.nombre} no tiene inventario disponible`), {
+          status: 400,
+        });
+      }
+      if (cantidad > producto.stock) {
+        throw Object.assign(
+          new Error(`Solo hay ${producto.stock} unidades disponibles de ${producto.nombre}`),
+          { status: 400 }
+        );
+      }
       const precio = Number(producto.precio);
       const totalLinea = redondear(precio * cantidad);
       total += totalLinea;
       lineas.push([producto.id, producto.nombre, cantidad, precio, totalLinea]);
+    }
+
+    for (const [productoId, , cantidad] of lineas) {
+      await conn.query('UPDATE productos SET stock = stock - $1 WHERE id = $2', [
+        cantidad,
+        productoId,
+      ]);
     }
 
     total = redondear(total);
