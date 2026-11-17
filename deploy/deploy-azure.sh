@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Corre esto DENTRO de Azure Cloud Shell (bash), ya autenticado con tu cuenta.
-# Antes: cd ~/facturacion  (donde se extrajo el proyecto)
+
 set -euo pipefail
 
 SUFFIX=$(date +%s | tail -c 6)
