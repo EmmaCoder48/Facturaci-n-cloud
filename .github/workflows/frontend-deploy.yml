@@ -1,0 +1,69 @@
+name: Build and deploy frontend to Azure Storage Static Website
+
+on:
+  push:
+    branches:
+      - 'main'
+    paths:
+      - 'frontend/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js version
+        uses: actions/setup-node@v3
+        with:
+          node-version: '22.x'
+
+      - name: Install and build
+        run: |
+          cd frontend
+          npm install
+          npm run build
+
+      - name: Upload artifact for deployment job
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Download artifact from build job
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_93CB4645F9534782B2F9E2DF49D8367F }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_3472B3470E2D432F813F36B05DD4FC21 }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_0BE82DBEC5AE47A4AE69E69D2853CD15 }}
+
+      - name: Deploy to Storage Static Website
+        run: |
+          az storage blob upload-batch \
+            --account-name facfront92567 \
+            --destination '$web' \
+            --source dist \
+            --overwrite \
+            --auth-mode login
+
+      - name: Logout
+        run: az logout
+        if: always()
