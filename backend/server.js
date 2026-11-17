@@ -1,4 +1,16 @@
 require('dotenv').config();
+
+// Application Insights debe arrancar antes que cualquier otro módulo para
+// poder instrumentar automáticamente express, pg, http, etc.
+if (process.env.APPLICATIONINSIGHTS_CONNECTION_STRING) {
+  const appInsights = require('applicationinsights');
+  appInsights
+    .setup()
+    .setSendLiveMetrics(true)
+    .setAutoCollectConsole(true, true)
+    .start();
+}
+
 const crypto = require('crypto');
 const express = require('express');
 const cors = require('cors');
@@ -91,7 +103,44 @@ app.patch('/api/productos/:id/stock', requiereAdmin, async (req, res, next) => {
   }
 });
 
-app.get('/api/facturas', async (req, res, next) => {
+// Resumen para el panel de reportes: ventas de los últimos 7 días,
+// productos más vendidos y totales acumulados.
+app.get('/api/reportes', requiereAdmin, async (req, res, next) => {
+  try {
+    const db = getPool();
+    const [porDia, topProductos, acumulado] = await Promise.all([
+      db.query(`
+        SELECT TO_CHAR(fecha, 'YYYY-MM-DD') AS dia,
+               COUNT(*)::int AS facturas,
+               COALESCE(SUM(total), 0)::float AS total
+        FROM facturas
+        WHERE fecha >= NOW() - INTERVAL '7 days'
+        GROUP BY dia
+        ORDER BY dia
+      `),
+      db.query(`
+        SELECT descripcion, SUM(cantidad)::int AS unidades
+        FROM detalle_factura
+        GROUP BY descripcion
+        ORDER BY unidades DESC
+        LIMIT 5
+      `),
+      db.query(`
+        SELECT COUNT(*)::int AS facturas, COALESCE(SUM(total), 0)::float AS total
+        FROM facturas
+      `),
+    ]);
+    res.json({
+      porDia: porDia.rows,
+      topProductos: topProductos.rows,
+      acumulado: acumulado.rows[0],
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.get('/api/facturas', requiereAdmin, async (req, res, next) => {
   try {
     const { rows } = await getPool().query('SELECT * FROM facturas ORDER BY id DESC LIMIT 50');
     res.json(rows);

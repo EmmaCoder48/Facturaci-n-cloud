@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import Login from './Login';
 import Inventario from './Inventario';
+import Reportes from './Reportes';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const Q = (n) => 'Q ' + Number(n).toFixed(2);
@@ -9,7 +10,7 @@ export default function App() {
   const [adminPassword, setAdminPassword] = useState(
     () => sessionStorage.getItem('adminPassword') || ''
   );
-  const [vista, setVista] = useState('caja'); // 'caja' | 'inventario'
+  const [vista, setVista] = useState('caja'); // 'caja' | 'inventario' | 'reportes'
   const [productos, setProductos] = useState([]);
   const [carrito, setCarrito] = useState({}); // { idProducto: cantidad }
   const [cliente, setCliente] = useState({ nit: '', nombre: '', direccion: '' });
@@ -107,6 +108,12 @@ export default function App() {
           >
             Inventario
           </button>
+          <button
+            className={vista === 'reportes' ? 'activa' : ''}
+            onClick={() => setVista('reportes')}
+          >
+            Reportes
+          </button>
         </nav>
         <button className="salir" onClick={salir}>
           Salir
@@ -122,6 +129,8 @@ export default function App() {
           productos={productos}
           onCambio={cargarProductos}
         />
+      ) : vista === 'reportes' ? (
+        <Reportes api={API} adminPassword={adminPassword} />
       ) : (
       <main>
         <section className="productos">
@@ -199,6 +208,39 @@ export default function App() {
 }
 
 function Factura({ factura, onNueva }) {
+  const descargarPdf = async () => {
+    const { jsPDF } = await import('jspdf');
+    const doc = new jsPDF({ unit: 'mm', format: [80, 150] });
+    let y = 10;
+    const linea = (texto, tam = 10, negrita = false) => {
+      doc.setFontSize(tam);
+      doc.setFont('helvetica', negrita ? 'bold' : 'normal');
+      doc.text(texto, 5, y);
+      y += tam * 0.5 + 2;
+    };
+
+    linea('Supermercado La Nube', 12, true);
+    linea('Factura electrónica (simulada)', 8);
+    y += 2;
+    linea(`Serie/No: ${factura.serie}-${String(factura.id).padStart(6, '0')}`, 8);
+    linea(`Autorización: ${factura.autorizacion}`, 7);
+    linea(`Fecha: ${new Date(factura.fecha).toLocaleString('es-GT')}`, 8);
+    linea(`NIT: ${factura.nit}`, 8);
+    linea(`Nombre: ${factura.nombre}`, 8);
+    linea(`Dirección: ${factura.direccion}`, 8);
+    y += 2;
+    factura.items.forEach((i) => {
+      linea(`${i.cantidad} x ${i.descripcion}`, 8);
+      linea(`  ${Q(i.precio_unitario)} c/u = ${Q(i.total_linea)}`, 8);
+    });
+    y += 2;
+    linea(`Subtotal (sin IVA): ${Q(factura.subtotal)}`, 8);
+    linea(`IVA 12%: ${Q(factura.iva)}`, 8);
+    linea(`Total: ${Q(factura.total)}`, 11, true);
+
+    doc.save(`${factura.serie}-${String(factura.id).padStart(6, '0')}.pdf`);
+  };
+
   return (
     <div className="app">
       <div className="factura">
@@ -247,6 +289,7 @@ function Factura({ factura, onNueva }) {
         </p>
         <div className="acciones">
           <button onClick={() => window.print()}>Imprimir</button>
+          <button onClick={descargarPdf}>Descargar PDF</button>
           <button className="primario" onClick={onNueva}>
             Nueva venta
           </button>

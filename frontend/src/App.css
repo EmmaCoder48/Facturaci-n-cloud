@@ -15,6 +15,18 @@ header { display: flex; justify-content: space-between; align-items: center; gap
 .agotado { color: #b91c1c; font-weight: 600; }
 .disponible { color: #64748b; }
 .producto small.agotado, .producto small.disponible { display: block; }
+
+.reportes .tarjetas { display: flex; gap: 12px; margin-bottom: 20px; }
+.reportes .tarjeta { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 14px 18px; min-width: 160px; }
+.reportes .tarjeta small { display: block; color: #64748b; }
+.reportes .tarjeta strong { font-size: 22px; color: #14532d; }
+.barras { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+.barra-fila { display: grid; grid-template-columns: 140px 1fr 90px; align-items: center; gap: 8px; }
+.barra-etiqueta { font-size: 13px; color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.barra-pista { background: #e5e7eb; border-radius: 6px; height: 14px; overflow: hidden; }
+.barra { background: #14532d; height: 100%; border-radius: 6px; }
+.barra.producto { background: #0369a1; }
+.barra-valor { font-size: 13px; text-align: right; color: #334155; }
 h1 { margin: 0; font-size: 22px; }
 h2 { font-size: 16px; margin: 16px 0 10px; }
 main { display: grid; grid-template-columns: 1fr 380px; gap: 16px; margin-top: 16px; }
