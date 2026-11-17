@@ -1,3 +1,4 @@
+
 name: Build and deploy frontend to Azure Storage Static Website
 
 on:
@@ -23,6 +24,8 @@ jobs:
           node-version: '22.x'
 
       - name: Install and build
+        env:
+          VITE_API_URL: https://facturacion-backend-92567.azurewebsites.net
         run: |
           cd frontend
           npm install
